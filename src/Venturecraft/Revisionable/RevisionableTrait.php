@@ -199,6 +199,12 @@ trait RevisionableTrait
                     'updated_at' => new \DateTime(),
                 );
 
+                if( class_exists('\App\Repositories\Revision\RevisionRepository') ) {
+                    $extraAttributes = app(\App\Repositories\Revision\RevisionRepository::class)->getExtraAttributes();
+                    $original = array_merge($original, $extraAttributes);
+                }
+
+
                 $revisions[] = array_merge($original, $this->getAdditionalFields());
             }
 
