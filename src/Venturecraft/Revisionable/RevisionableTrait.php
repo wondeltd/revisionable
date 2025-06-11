@@ -213,7 +213,7 @@ trait RevisionableTrait
                     }
                 }
                 $revision = Revisionable::newModel();
-                \DB::table($revision->getTable())->insert($revisions);
+                \DB::connection($revision->getConnectionName())->table($revision->getTable())->insert($revisions);
                 \Event::dispatch('revisionable.saved', array('model' => $this, 'revisions' => $revisions));
             }
         }
@@ -248,7 +248,7 @@ trait RevisionableTrait
             $revisions = array_merge($revisions[0], $this->getAdditionalFields());
 
             $revision = Revisionable::newModel();
-            \DB::table($revision->getTable())->insert($revisions);
+            \DB::connection($revision->getConnectionName())->table($revision->getTable())->insert($revisions);
             \Event::dispatch('revisionable.created', array('model' => $this, 'revisions' => $revisions));
         }
 
@@ -278,7 +278,7 @@ trait RevisionableTrait
             $revisions = array_merge($revisions[0], $this->getAdditionalFields());
 
             $revision = Revisionable::newModel();
-            \DB::table($revision->getTable())->insert($revisions);
+            \DB::connection($revision->getConnectionName())->table($revision->getTable())->insert($revisions);
             \Event::dispatch('revisionable.deleted', array('model' => $this, 'revisions' => $revisions));
         }
     }
@@ -309,7 +309,7 @@ trait RevisionableTrait
             );
 
             $revision = Revisionable::newModel();
-            \DB::table($revision->getTable())->insert($revisions);
+            \DB::connection($revision->getConnectionName())->table($revision->getTable())->insert($revisions);
             \Event::dispatch('revisionable.deleted', array('model' => $this, 'revisions' => $revisions));
         }
     }
