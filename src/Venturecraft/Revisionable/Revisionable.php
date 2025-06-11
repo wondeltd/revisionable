@@ -1,5 +1,6 @@
 <?php namespace Venturecraft\Revisionable;
 
+use Illuminate\Support\Arr;
 use Illuminate\Database\Eloquent\Model as Eloquent;
 
 /*
@@ -64,14 +65,29 @@ class Revisionable extends Eloquent
             $model->postSave();
         });
 
-        static::created(function($model){
+        static::created(function ($model) {
             $model->postCreate();
         });
 
         static::deleted(function ($model) {
             $model->preSave();
             $model->postDelete();
+            $model->postForceDelete();
         });
+    }
+    /**
+     * Instance the revision model
+     * @return \Illuminate\Database\Eloquent\Model
+     */
+    public static function newModel()
+    {
+        $model = app('config')->get('revisionable.model');
+
+        if (! $model) {
+            $model = 'Venturecraft\Revisionable\Revision';
+        }
+
+        return new $model;
     }
 
     /**
@@ -79,7 +95,7 @@ class Revisionable extends Eloquent
      */
     public function revisionHistory()
     {
-        return $this->morphMany('\Venturecraft\Revisionable\Revision', 'revisionable');
+        return $this->morphMany(get_class(static::newModel()), 'revisionable');
     }
 
     /**
@@ -107,11 +123,11 @@ class Revisionable extends Eloquent
             // the below is ugly, for sure, but it's required so we can save the standard model
             // then use the keep / dontkeep values for later, in the isRevisionable method
             $this->dontKeep = isset($this->dontKeepRevisionOf) ?
-                $this->dontKeepRevisionOf + $this->dontKeep
+                array_merge($this->dontKeepRevisionOf, $this->dontKeep)
                 : $this->dontKeep;
 
             $this->doKeep = isset($this->keepRevisionOf) ?
-                $this->keepRevisionOf + $this->doKeep
+                array_merge($this->keepRevisionOf, $this->doKeep)
                 : $this->doKeep;
 
             unset($this->attributes['dontKeepRevisionOf']);
@@ -141,19 +157,19 @@ class Revisionable extends Eloquent
 
             foreach ($changes_to_record as $key => $change) {
                 $revisions[] = array(
-                    'revisionable_type'     => get_class($this),
+                    'revisionable_type'     => $this->getMorphClass(),
                     'revisionable_id'       => $this->getKey(),
                     'key'                   => $key,
-                    'old_value'             => array_get($this->originalData, $key),
+                    'old_value'             => Arr::get($this->originalData, $key),
                     'new_value'             => $this->updatedData[$key],
-                    'user_id'               => $this->getUserId(),
+                    'user_id'               => $this->getSystemUserId(),
                     'created_at'            => new \DateTime(),
                     'updated_at'            => new \DateTime(),
                 );
             }
 
             if (count($revisions) > 0) {
-                $revision = new Revision;
+                $revision = static::newModel();
                 \DB::table($revision->getTable())->insert($revisions);
             }
         }
@@ -176,19 +192,18 @@ class Revisionable extends Eloquent
         if ((!isset($this->revisionEnabled) || $this->revisionEnabled))
         {
             $revisions[] = array(
-                'revisionable_type' => get_class($this),
+                'revisionable_type' => $this->getMorphClass(),
                 'revisionable_id' => $this->getKey(),
-                'key' => 'created_at',
+                'key' => self::CREATED_AT,
                 'old_value' => null,
-                'new_value' => $this->created_at,
-                'user_id' => $this->getUserId(),
+                'new_value' => $this->{self::CREATED_AT},
+                'user_id' => $this->getSystemUserId(),
                 'created_at' => new \DateTime(),
                 'updated_at' => new \DateTime(),
             );
 
-            $revision = new Revision;
+            $revision = static::newModel();
             \DB::table($revision->getTable())->insert($revisions);
-
         }
     }
 
@@ -199,19 +214,50 @@ class Revisionable extends Eloquent
     {
         if ((!isset($this->revisionEnabled) || $this->revisionEnabled)
             && $this->isSoftDelete()
-            && $this->isRevisionable('deleted_at')) {
+            && $this->isRevisionable($this->getDeletedAtColumn())) {
             $revisions[] = array(
-                'revisionable_type' => get_class($this),
+                'revisionable_type' => $this->getMorphClass(),
                 'revisionable_id' => $this->getKey(),
-                'key' => 'deleted_at',
+                'key' => $this->getDeletedAtColumn(),
                 'old_value' => null,
-                'new_value' => $this->deleted_at,
-                'user_id' => $this->getUserId(),
+                'new_value' => $this->{$this->getDeletedAtColumn()},
+                'user_id' => $this->getSystemUserId(),
                 'created_at' => new \DateTime(),
                 'updated_at' => new \DateTime(),
             );
-            $revision = new \Venturecraft\Revisionable\Revision;
+            $revision = static::newModel();
             \DB::table($revision->getTable())->insert($revisions);
+        }
+    }
+
+    /**
+     * If forcedeletes are enabled, set the value created_at of model to null
+     *
+     * @return void|bool
+     */
+    public function postForceDelete()
+    {
+        if (empty($this->revisionForceDeleteEnabled)) {
+            return false;
+        }
+
+        if ((!isset($this->revisionEnabled) || $this->revisionEnabled)
+            && (($this->isSoftDelete() && $this->isForceDeleting()) || !$this->isSoftDelete())) {
+
+            $revisions[] = array(
+                'revisionable_type' => $this->getMorphClass(),
+                'revisionable_id' => $this->getKey(),
+                'key' => self::CREATED_AT,
+                'old_value' => $this->{self::CREATED_AT},
+                'new_value' => null,
+                'user_id' => $this->getSystemUserId(),
+                'created_at' => new \DateTime(),
+                'updated_at' => new \DateTime(),
+            );
+
+            $revision = Revisionable::newModel();
+            \DB::table($revision->getTable())->insert($revisions);
+            \Event::dispatch('revisionable.deleted', array('model' => $this, 'revisions' => $revisions));
         }
     }
 
@@ -219,12 +265,14 @@ class Revisionable extends Eloquent
      * Attempt to find the user id of the currently logged in user
      * Supports Cartalyst Sentry/Sentinel based authentication, as well as stock Auth
      **/
-    private function getUserId()
+    private function getSystemUserId()
     {
         try {
             if (class_exists($class = '\Cartalyst\Sentry\Facades\Laravel\Sentry')
                     || class_exists($class = '\Cartalyst\Sentinel\Laravel\Facades\Sentinel')) {
                 return ($class::check()) ? $class::getUser()->id : null;
+            } elseif (function_exists('backpack_auth') && backpack_auth()->check()) {
+                return backpack_user()->id;
             } elseif (\Auth::check()) {
                 return \Auth::user()->getAuthIdentifier();
             }
