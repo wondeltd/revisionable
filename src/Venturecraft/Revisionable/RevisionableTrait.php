@@ -4,6 +4,7 @@ namespace Venturecraft\Revisionable;
 
 use App\Repositories\Revision\RevisionRepository;
 use Illuminate\Support\Arr;
+use Carbon\Carbon;
 
 /*
  * This file is part of the Revisionable package by Venture Craft
@@ -126,11 +127,23 @@ trait RevisionableTrait
             $this->originalData = $this->original;
             $this->updatedData = $this->attributes;
 
-            // we can only safely compare basic items,
-            // so for now we drop any object based items, like DateTime
             foreach ($this->updatedData as $key => $val) {
+
+                // Handle changed attributes which are stored as date strings in the DB
+                if (
+                    $this->changedAttributeIsADate($key) &&
+                    $this->isStandardDateFormat($this->originalData[$key])
+                    ) {
+                        $dateObject = $this->asDateTime($val);
+                        $this->updatedData[$key] = $dateObject->toDateString();
+                }
+
                 $castCheck = ['object', 'array'];
-                if (isset($this->casts[$key]) && in_array(gettype($val), $castCheck) && in_array($this->casts[$key], $castCheck) && isset($this->originalData[$key])) {
+                if (isset($this->casts[$key]) && 
+                    in_array(gettype($val), $castCheck) && 
+                    in_array($this->casts[$key], $castCheck) && 
+                    isset($this->originalData[$key])
+                    ) {
                     // Sorts the keys of a JSON object due Normalization performed by MySQL
                     // So it doesn't set false flag if it is changed only order of key or whitespace after comma
 
@@ -539,5 +552,18 @@ trait RevisionableTrait
         }
 
         return $attribute;
+    }
+
+    private function changedAttributeIsADate(string $key): bool
+    {
+       if (!isset($this->originalData[$key])) {
+            return false;
+        }
+
+        $value = $this->updatedData[$key];
+
+        return  $value instanceof Carbon || 
+            $this->isDateAttribute($key) || 
+            $this->isDateCastableWithCustomFormat($key);
     }
 }
