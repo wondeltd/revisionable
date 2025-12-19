@@ -3,6 +3,8 @@
 namespace Venturecraft\Revisionable\Tests;
 
 use Carbon\Carbon;
+use Config;
+use Illuminate\Support\Facades\DB;
 use Venturecraft\Revisionable\Tests\Models\User;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -138,6 +140,37 @@ class DateRevisionTest extends TestCase
         // Change date
         $user->update([
             'date' => '2025-12-18 23:59:59',
+        ]);
+
+        // we should have no revisions to the date
+        $this->assertCount(0, $user->revisionHistory);
+    }
+
+    #[Test]
+    public function revision_is_not_stored_when_a_custom_cast_datetime_object_in_a_different_timezone_is_set()
+    {
+        $this->loadMigrationsFrom([
+            '--database' => 'testbench',
+            '--path' => realpath(__DIR__.'/migrations'),
+        ]);
+
+        $user = User::create([
+            'name' => 'James Judd',
+            'email' => 'james.judd@revisionable.test',
+            'date' => '2025-04-01',
+            'password' => \Hash::make('456'),
+        ]);
+
+        // Set custom casts
+        $user->mergeCasts([
+            'date' => 'date::Y-m-d',
+        ]);
+
+        // Create a datetime string that represents the same date in a different timezone
+        $dateTimeInNonUtcTimezone = Carbon::parse('2025-03-31 20:00:00.0', 'America/New_York');
+
+        $user->update([
+            'date' => $dateTimeInNonUtcTimezone
         ]);
 
         // we should have no revisions to the date

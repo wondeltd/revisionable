@@ -123,19 +123,21 @@ trait RevisionableTrait
     {
         if (!isset($this->revisionEnabled) || $this->revisionEnabled) {
             // if there's no revisionEnabled. Or if there is, if it's true
-
             $this->originalData = $this->original;
             $this->updatedData = $this->attributes;
 
             foreach ($this->updatedData as $key => $val) {
-
                 // Handle changed attributes which are stored as date strings in the DB
                 if (
                     $this->changedAttributeIsADate($key) &&
                     $this->isStandardDateFormat($this->originalData[$key])
                     ) {
-                        $dateObject = $this->asDateTime($val);
-                        $this->updatedData[$key] = $dateObject->toDateString();
+                        $carbonObject = $this->asDateTime($val);
+
+                        // Use the app timezone configuration to standardize date comparison
+                        $this->updatedData[$key] = $carbonObject
+                            ->setTimezone('UTC')
+                            ->toDateString();
                 }
 
                 $castCheck = ['object', 'array'];
