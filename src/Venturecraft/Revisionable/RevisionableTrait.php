@@ -133,11 +133,8 @@ trait RevisionableTrait
                     $this->isStandardDateFormat($this->originalData[$key])
                     ) {
                         $carbonObject = $this->asDateTime($val);
-
-                        // Use the app timezone configuration to standardize date comparison
-                        $this->updatedData[$key] = $carbonObject
-                            ->setTimezone('UTC')
-                            ->toDateString();
+                        
+                        $this->updatedData[$key] = $carbonObject->toDateString();
                 }
 
                 $castCheck = ['object', 'array'];
