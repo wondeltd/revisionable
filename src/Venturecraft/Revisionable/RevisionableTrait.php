@@ -134,7 +134,9 @@ trait RevisionableTrait
                     ) {
                         $carbonObject = $this->asDateTime($val);
                         
-                        $this->updatedData[$key] = $carbonObject->toDateString();
+                        $this->updatedData[$key] = $carbonObject
+                            ->timezone('UTC')
+                            ->toDateString();
                 }
 
                 $castCheck = ['object', 'array'];
