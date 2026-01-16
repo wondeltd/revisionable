@@ -129,22 +129,22 @@ trait RevisionableTrait
             foreach ($this->updatedData as $key => $val) {
                 // Handle changed attributes which are stored as date strings in the DB
                 if (
-                    $this->changedAttributeIsADate($key) &&
-                    $this->isStandardDateFormat($this->originalData[$key])
-                    ) {
-                        $carbonObject = $this->asDateTime($val);
-                        
-                        $this->updatedData[$key] = $carbonObject
-                            ->timezone('UTC')
-                            ->toDateString();
+                    $this->changedAttributeIsADate($key)
+                    && $this->isStandardDateFormat($this->originalData[$key])
+                ) {
+                    $carbonObject = $this->asDateTime($val);
+
+                    $this->updatedData[$key] = $carbonObject
+                        ->timezone('UTC')
+                        ->toDateString();
                 }
 
                 $castCheck = ['object', 'array'];
-                if (isset($this->casts[$key]) && 
-                    in_array(gettype($val), $castCheck) && 
-                    in_array($this->casts[$key], $castCheck) && 
-                    isset($this->originalData[$key])
-                    ) {
+                if (isset($this->casts[$key])
+                    && in_array(gettype($val), $castCheck)
+                    && in_array($this->casts[$key], $castCheck)
+                    && isset($this->originalData[$key])
+                ) {
                     // Sorts the keys of a JSON object due Normalization performed by MySQL
                     // So it doesn't set false flag if it is changed only order of key or whitespace after comma
 
@@ -557,14 +557,14 @@ trait RevisionableTrait
 
     private function changedAttributeIsADate(string $key): bool
     {
-       if (!isset($this->originalData[$key])) {
+        if (!isset($this->originalData[$key])) {
             return false;
         }
 
         $value = $this->updatedData[$key];
 
-        return  $value instanceof Carbon || 
-            $this->isDateAttribute($key) || 
-            $this->isDateCastableWithCustomFormat($key);
+        return  $value instanceof Carbon
+            || $this->isDateAttribute($key)
+            || $this->isDateCastableWithCustomFormat($key);
     }
 }
