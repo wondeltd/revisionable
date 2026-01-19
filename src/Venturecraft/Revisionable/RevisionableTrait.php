@@ -127,16 +127,9 @@ trait RevisionableTrait
             $this->updatedData = $this->attributes;
 
             foreach ($this->updatedData as $key => $val) {
-                // Handle changed attributes which are stored as date strings in the DB
-                if (
-                    $this->changedAttributeIsADate($key)
-                    && $this->isStandardDateFormat($this->originalData[$key])
-                ) {
-                    $carbonObject = $this->asDateTime($val);
-
-                    $this->updatedData[$key] = $carbonObject
-                        ->timezone('UTC')
-                        ->toDateString();
+                // Handle changed date attributes
+                if ($this->changedAttributeIsADateType($key)) {
+                    $this->normalizeDatesForRevisionCheck($key);
                 }
 
                 $castCheck = ['object', 'array'];
@@ -555,7 +548,37 @@ trait RevisionableTrait
         return $attribute;
     }
 
-    private function changedAttributeIsADate(string $key): bool
+    private function normalizeDatesForRevisionCheck(string $key)
+    {
+        $originalValue = $this->originalData[$key] ?? null;
+        $updatedValue = $this->updatedData[$key] ?? null;
+
+        // Return if new or old values are null
+        if ($originalValue === null || $updatedValue === null) {
+            return;
+        }
+
+        // If original data is a date string (Y-m-d), cast values to date string for comparison
+        if (is_string($originalValue)
+            && $this->isStandardDateFormat($originalValue)
+            || $this->castIsDate($key)) {
+
+            try {
+                $carbon = $this->asDateTime($updatedValue);
+
+                // Normalize values to a date only string
+                $this->updatedData[$key] = $carbon->timezone('UTC')->toDateString();
+                $this->originalData[$key] = $this->asDateTime($originalValue)->toDateString();
+
+            } catch (\Throwable $e) {
+                // If parsing fails, fall back to default revision logic
+            }
+
+            return;
+        }
+    }
+
+    private function changedAttributeIsADateType(string $key): bool
     {
         if (!isset($this->originalData[$key])) {
             return false;
@@ -566,5 +589,11 @@ trait RevisionableTrait
         return  $value instanceof Carbon
             || $this->isDateAttribute($key)
             || $this->isDateCastableWithCustomFormat($key);
+    }
+
+
+    private function castIsDate(string $key): bool
+    {
+        return isset($this->casts[$key]) && $this->casts[$key] === 'date';
     }
 }
